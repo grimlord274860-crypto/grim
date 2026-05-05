@@ -5,12 +5,7 @@ import { reviews } from '../data/mock';
 const Stars = ({ rating }) => (
   <div className="flex items-center gap-0.5">
     {Array.from({ length: 5 }).map((_, i) => (
-      <Star
-        key={i}
-        className={`w-4 h-4 ${
-          i < Math.round(rating) ? 'text-[#ffb400] fill-[#ffb400]' : 'text-white/20'
-        }`}
-      />
+      <Star key={i} className={`w-4 h-4 ${i < Math.round(rating) ? 'text-[#00d4ff] fill-[#00d4ff]' : 'text-white/20'}`} />
     ))}
   </div>
 );
@@ -25,17 +20,11 @@ const Reviews = () => {
             <span className="text-white font-semibold">4.8</span>
             <span className="text-white/60 text-sm">Based on 46 reviews</span>
           </div>
-          <h2 className="text-white font-bold text-3xl sm:text-4xl lg:text-5xl mt-6">
-            What our customers say
-          </h2>
+          <h2 className="text-white font-bold text-3xl sm:text-4xl lg:text-5xl mt-6">What our customers say</h2>
         </div>
-
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 max-w-6xl mx-auto">
           {reviews.map((r, i) => (
-            <article
-              key={i}
-              className="bg-[#13151b] border border-white/10 rounded-xl p-6 hover:border-[#00d34d]/40 transition-colors flex flex-col"
-            >
+            <article key={i} className="bg-[#13151b] border border-white/10 rounded-xl p-6 hover:border-[#00d4ff]/40 transition-colors flex flex-col">
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <h4 className="text-white font-semibold">{r.name}</h4>
@@ -53,3 +42,4 @@ const Reviews = () => {
 };
 
 export default Reviews;
+export { Stars };

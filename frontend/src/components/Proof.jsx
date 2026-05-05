@@ -23,7 +23,7 @@ const Proof = () => {
             >
               <img
                 src={src}
-                alt={`GainzAlgo proof chart ${i + 1}`}
+                alt={`Trading proof chart ${i + 1}`}
                 loading="lazy"
                 className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500"
               />
@@ -33,8 +33,8 @@ const Proof = () => {
 
         <div className="mt-20 text-center max-w-4xl mx-auto">
           <p className="text-white font-bold text-2xl sm:text-3xl lg:text-4xl leading-tight">
-            To succeed in trading, you need the right tools. GainzAlgo empowers you to capitalize
-            on market opportunities and join the ranks of successful traders.
+            To succeed in trading, you need the right tools. We empower you to capitalize on
+            market opportunities and join the ranks of successful traders.
           </p>
         </div>
       </div>
