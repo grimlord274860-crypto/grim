@@ -12,7 +12,7 @@ from typing import Any, Dict, List
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
-from auth import verify_credentials, create_token, require_admin  # noqa: E402
+from auth import verify_credentials, create_token, require_admin, require_customer, hash_password, verify_password  # noqa: E402
 from seed_content import INITIAL_CONTENT  # noqa: E402
 
 mongo_url = os.environ["MONGO_URL"]
@@ -71,13 +71,65 @@ async def root():
 async def login(payload: LoginIn):
     if not verify_credentials(payload.email, payload.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    token = create_token(payload.email)
+    token = create_token(payload.email, role="admin")
     return LoginOut(token=token, email=payload.email)
 
 
 @api_router.get("/auth/me")
 async def me(email: str = Depends(require_admin)):
     return {"email": email, "role": "admin"}
+
+
+# ---------- Customer auth ----------
+class RegisterIn(BaseModel):
+    name: str
+    email: str
+    password: str
+
+
+class CustomerOut(BaseModel):
+    token: str
+    email: str
+    name: str
+
+
+@api_router.post("/customer/register", response_model=CustomerOut)
+async def customer_register(payload: RegisterIn):
+    email = payload.email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Invalid email")
+    if len(payload.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    existing = await db.customers.find_one({"email": email})
+    if existing:
+        raise HTTPException(status_code=409, detail="An account with this email already exists")
+    doc = {
+        "email": email,
+        "name": payload.name.strip() or email.split("@")[0],
+        "password_hash": hash_password(payload.password),
+        "created_at": __import__("datetime").datetime.utcnow(),
+    }
+    await db.customers.insert_one(doc)
+    token = create_token(email, role="customer")
+    return CustomerOut(token=token, email=email, name=doc["name"])
+
+
+@api_router.post("/customer/login", response_model=CustomerOut)
+async def customer_login(payload: LoginIn):
+    email = payload.email.strip().lower()
+    user = await db.customers.find_one({"email": email})
+    if not user or not verify_password(payload.password, user.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    token = create_token(email, role="customer")
+    return CustomerOut(token=token, email=email, name=user.get("name", ""))
+
+
+@api_router.get("/customer/me")
+async def customer_me(email: str = Depends(require_customer)):
+    user = await db.customers.find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"email": user["email"], "name": user.get("name", ""), "role": "customer"}
 
 
 @api_router.get("/content/published")

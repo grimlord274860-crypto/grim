@@ -17,10 +17,13 @@ import MT5Page from './pages/MT5Page';
 import ScrollToTop from './components/ScrollToTop';
 import { SiteProvider, useSite } from './context/SiteContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { CustomerAuthProvider } from './context/CustomerAuthContext';
 import { applyTheme } from './theme';
 import AdminLogin from './admin/AdminLogin';
 import AdminLayout from './admin/AdminLayout';
 import ModeBanner from './components/ModeBanner';
+import AuthModal from './components/AuthModal';
+import Toaster from './components/Toaster';
 
 const Home = () => (
   <>
@@ -53,6 +56,7 @@ const Layout = ({ children }) => {
       <Header />
       <main>{children}</main>
       <Footer />
+      <AuthModal />
     </div>
   );
 };
@@ -69,25 +73,28 @@ function App() {
     <div className="App">
       <AuthProvider>
         <SiteProvider>
-          <BrowserRouter>
-            <ScrollToTop />
-            <Routes>
-              <Route path="/admin/login" element={<AdminLogin />} />
-              <Route
-                path="/admin/*"
-                element={
-                  <RequireAuth>
-                    <AdminLayout />
-                  </RequireAuth>
-                }
-              />
-              <Route path="/" element={<Layout><Home /></Layout>} />
-              <Route path="/indicators" element={<Layout><IndicatorsPage /></Layout>} />
-              <Route path="/indicators/:slug" element={<Layout><IndicatorDetailPage /></Layout>} />
-              <Route path="/referral" element={<Layout><ReferralPage /></Layout>} />
-              <Route path="/mt5" element={<Layout><MT5Page /></Layout>} />
-            </Routes>
-          </BrowserRouter>
+          <CustomerAuthProvider>
+            <BrowserRouter>
+              <ScrollToTop />
+              <Routes>
+                <Route path="/admin/login" element={<AdminLogin />} />
+                <Route
+                  path="/admin/*"
+                  element={
+                    <RequireAuth>
+                      <AdminLayout />
+                    </RequireAuth>
+                  }
+                />
+                <Route path="/" element={<Layout><Home /></Layout>} />
+                <Route path="/indicators" element={<Layout><IndicatorsPage /></Layout>} />
+                <Route path="/indicators/:slug" element={<Layout><IndicatorDetailPage /></Layout>} />
+                <Route path="/referral" element={<Layout><ReferralPage /></Layout>} />
+                <Route path="/mt5" element={<Layout><MT5Page /></Layout>} />
+              </Routes>
+            </BrowserRouter>
+            <Toaster />
+          </CustomerAuthProvider>
         </SiteProvider>
       </AuthProvider>
     </div>

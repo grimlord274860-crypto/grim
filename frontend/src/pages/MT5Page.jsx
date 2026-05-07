@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Check, Cpu, Zap, Shield, ArrowRight, Sparkles } from 'lucide-react';
 import { useSite } from '../context/SiteContext';
+import { useCustomerAuth } from '../context/CustomerAuthContext';
 import { withOpacity } from '../theme';
+import { toast } from '../components/Toaster';
 
 const ICONS = { Cpu, Zap, Shield, Sparkles };
 
@@ -12,9 +14,15 @@ const MT5Page = () => {
   const theme = content?.theme || {};
   const primary = theme.primaryColor || '#00d4ff';
   const [billing, setBilling] = useState('monthly');
+  const { requireAuth } = useCustomerAuth();
 
   const handleSelect = (plan) => {
-    alert(`Selected ${plan.name} plan — $${plan.price}/${plan.period} (mock)`);
+    requireAuth(() => {
+      const cart = JSON.parse(localStorage.getItem('cart') || '[]');
+      cart.push({ id: plan.id, name: `${plan.name} plan`, price: plan.price });
+      localStorage.setItem('cart', JSON.stringify(cart));
+      toast(`${plan.name} plan added — $${plan.price}/${plan.period}`);
+    }, 'login');
   };
 
   return (

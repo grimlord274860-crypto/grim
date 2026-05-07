@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { useParams, Link, Navigate } from 'react-router-dom';
 import { ChevronLeft, Check, ShoppingCart, Play, Zap } from 'lucide-react';
 import { useSite } from '../context/SiteContext';
+import { useCustomerAuth } from '../context/CustomerAuthContext';
 import { Stars } from '../components/Reviews';
 import { withOpacity } from '../theme';
+import { toast } from '../components/Toaster';
 
 const IndicatorDetailPage = () => {
   const { slug } = useParams();
@@ -13,6 +15,7 @@ const IndicatorDetailPage = () => {
   const primary = theme.primaryColor || '#00d4ff';
   const [activeImg, setActiveImg] = useState(0);
   const [showVideo, setShowVideo] = useState(false);
+  const { requireAuth } = useCustomerAuth();
 
   if (!content) return null;
   if (!indicator) return <Navigate to="/indicators" replace />;
@@ -20,11 +23,15 @@ const IndicatorDetailPage = () => {
   const s = indicator.style || {};
   const accent = s.accent || primary;
 
-  const handleAddToCart = () => {
+  const performAddToCart = () => {
     const cart = JSON.parse(localStorage.getItem('cart') || '[]');
     cart.push({ id: indicator.id, name: indicator.name, price: indicator.price });
     localStorage.setItem('cart', JSON.stringify(cart));
-    alert(`${indicator.name} added to cart (mock).`);
+    toast(`${indicator.name} added to cart`);
+  };
+
+  const handleAddToCart = () => {
+    requireAuth(performAddToCart, 'login');
   };
 
   return (

@@ -155,6 +155,22 @@ backend:
           agent: "testing"
           comment: "✅ All search tests passed (4/4): q=indicator returns 200 with 6 Indicator results (URLs like /indicators/no-1). q=a (single char) returns empty results as expected (min 2 chars). q=mt5 returns 200 with 3 MT5 Plan results. q=tradingview returns 200 with 2 FAQ results. Search correctly filters by min query length and searches across all content types."
 
+  - task: "Customer auth (POST /api/customer/register, /api/customer/login, GET /api/customer/me)"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py, /app/backend/auth.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Adds bcrypt-hashed customer accounts in MongoDB collection `customers`. Token contains role='customer'. require_customer dependency rejects admin tokens & vice versa. Validation: email must contain '@', password >= 6 chars, returns 409 on duplicate email. Login returns 401 on bad creds. /me returns email+name+role for current customer."
+        - working: true
+          agent: "testing"
+          comment: "✅ All customer auth tests passed (11/11): Register with valid data returns 200 with token+email+name. Duplicate email returns 409. Invalid email (no @) returns 400. Password < 6 chars returns 400. Login with correct credentials returns 200 with token+email+name. Login with wrong password returns 401. Login with non-existent email returns 401. /customer/me without token returns 403. /customer/me with customer token returns 200 with email+name+role=customer. /customer/me with admin token returns 403 (cross-role rejection working). /auth/me with customer token returns 403 (cross-role rejection working). Regression tests confirmed: admin login, published content, and search endpoints still working correctly."
+
+
 frontend:
   - task: "Public pages dynamic from backend (SiteContext) + admin panel UI"
     implemented: true
@@ -171,11 +187,12 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 1
+  test_sequence: 2
   run_ui: false
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Customer auth (POST /api/customer/register, /api/customer/login, GET /api/customer/me)"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -223,3 +240,40 @@ agent_communication:
         - q=tradingview: ✅ Returns 2 FAQ results
         
         All endpoints working correctly. Draft/publish workflow verified. Search functionality across all content types confirmed. Original content restored via /api/content/reset-all.
+    - agent: "testing"
+      message: |
+        ✅ CUSTOMER AUTH TESTING COMPLETE - ALL TESTS PASSED (29/29 total)
+        
+        Comprehensive customer authentication testing completed successfully:
+        
+        👤 CUSTOMER AUTH (11/11 passed):
+        - POST /api/customer/register with valid data: ✅ Returns 200 with token+email+name
+        - Register duplicate email: ✅ Returns 409 (conflict)
+        - Register invalid email (no @): ✅ Returns 400 (validation error)
+        - Register short password (<6 chars): ✅ Returns 400 (validation error)
+        - POST /api/customer/login with correct credentials: ✅ Returns 200 with token+email+name
+        - Login with wrong password: ✅ Returns 401 (unauthorized)
+        - Login with non-existent email: ✅ Returns 401 (unauthorized)
+        - GET /api/customer/me without token: ✅ Returns 403 (forbidden)
+        - GET /api/customer/me with customer token: ✅ Returns 200 with email+name+role=customer
+        - GET /api/customer/me with admin token: ✅ Returns 403 (cross-role rejection working)
+        - GET /api/auth/me with customer token: ✅ Returns 403 (cross-role rejection working)
+        
+        🔄 REGRESSION TESTS (3/3 passed):
+        - Admin login still works: ✅
+        - GET /content/published still works: ✅
+        - GET /search still works: ✅
+        
+        🔐 CROSS-ROLE ISOLATION VERIFIED:
+        - Customer tokens are correctly rejected by admin endpoints (403)
+        - Admin tokens are correctly rejected by customer endpoints (403)
+        - Role-based access control working as expected
+        
+        📧 TEST DATA:
+        - Used timestamp-based email (pytest_<timestamp>@example.com) to avoid conflicts on re-runs
+        - Password validation enforced (min 6 chars)
+        - Email validation enforced (must contain @)
+        - Duplicate email detection working (409 on re-registration)
+        
+        All customer auth endpoints working correctly. No issues found. Backend is production-ready.
+

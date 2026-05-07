@@ -27,6 +27,9 @@ ADMIN_PASSWORD = "Shiva@#Grim1234"
 
 # Global token storage
 auth_token: Optional[str] = None
+customer_token: Optional[str] = None
+customer_email: Optional[str] = None
+customer_name: Optional[str] = None
 
 # Test results tracking
 tests_passed = 0
@@ -729,6 +732,380 @@ def test_search_tradingview():
         log_test("Search - q=tradingview", False, str(e))
 
 
+def test_customer_register_success():
+    """Test 16: POST /api/customer/register with valid data"""
+    global customer_token, customer_email, customer_name
+    import time
+    
+    # Use timestamp to ensure unique email on each run
+    timestamp = int(time.time())
+    customer_email = f"pytest_{timestamp}@example.com"
+    customer_name = "Test Customer"
+    password = "secret123"
+    
+    try:
+        response = requests.post(
+            f"{API_URL}/customer/register",
+            json={"name": customer_name, "email": customer_email, "password": password},
+            timeout=10
+        )
+        
+        if response.status_code != 200:
+            log_test(
+                "Customer Auth - Register with valid data",
+                False,
+                f"Expected 200, got {response.status_code}. Response: {response.text}"
+            )
+            return
+        
+        data = response.json()
+        if "token" not in data or "email" not in data or "name" not in data:
+            log_test(
+                "Customer Auth - Register with valid data",
+                False,
+                f"Missing required fields in response. Got: {data}"
+            )
+            return
+        
+        if data["email"] != customer_email.lower():
+            log_test(
+                "Customer Auth - Register with valid data",
+                False,
+                f"Email mismatch. Expected {customer_email.lower()}, got {data['email']}"
+            )
+            return
+        
+        customer_token = data["token"]
+        log_test(
+            "Customer Auth - Register with valid data",
+            True,
+            f"Customer registered: {customer_email}, token: {customer_token[:20]}..."
+        )
+    except Exception as e:
+        log_test("Customer Auth - Register with valid data", False, str(e))
+
+
+def test_customer_register_duplicate():
+    """Test 17: POST /api/customer/register with duplicate email (409)"""
+    if not customer_email:
+        log_test("Customer Auth - Register duplicate email returns 409", False, "No customer email available")
+        return
+    
+    try:
+        response = requests.post(
+            f"{API_URL}/customer/register",
+            json={"name": "Another Name", "email": customer_email, "password": "secret123"},
+            timeout=10
+        )
+        
+        if response.status_code == 409:
+            log_test("Customer Auth - Register duplicate email returns 409", True)
+        else:
+            log_test(
+                "Customer Auth - Register duplicate email returns 409",
+                False,
+                f"Expected 409, got {response.status_code}. Response: {response.text}"
+            )
+    except Exception as e:
+        log_test("Customer Auth - Register duplicate email returns 409", False, str(e))
+
+
+def test_customer_register_invalid_email():
+    """Test 18: POST /api/customer/register with invalid email (400)"""
+    try:
+        response = requests.post(
+            f"{API_URL}/customer/register",
+            json={"name": "Test", "email": "invalidemail", "password": "secret123"},
+            timeout=10
+        )
+        
+        if response.status_code == 400:
+            log_test("Customer Auth - Register invalid email returns 400", True)
+        else:
+            log_test(
+                "Customer Auth - Register invalid email returns 400",
+                False,
+                f"Expected 400, got {response.status_code}. Response: {response.text}"
+            )
+    except Exception as e:
+        log_test("Customer Auth - Register invalid email returns 400", False, str(e))
+
+
+def test_customer_register_short_password():
+    """Test 19: POST /api/customer/register with password < 6 chars (400)"""
+    try:
+        response = requests.post(
+            f"{API_URL}/customer/register",
+            json={"name": "Test", "email": "test@example.com", "password": "12345"},
+            timeout=10
+        )
+        
+        if response.status_code == 400:
+            log_test("Customer Auth - Register short password returns 400", True)
+        else:
+            log_test(
+                "Customer Auth - Register short password returns 400",
+                False,
+                f"Expected 400, got {response.status_code}. Response: {response.text}"
+            )
+    except Exception as e:
+        log_test("Customer Auth - Register short password returns 400", False, str(e))
+
+
+def test_customer_login_success():
+    """Test 20: POST /api/customer/login with correct credentials"""
+    if not customer_email:
+        log_test("Customer Auth - Login with correct credentials", False, "No customer email available")
+        return
+    
+    try:
+        response = requests.post(
+            f"{API_URL}/customer/login",
+            json={"email": customer_email, "password": "secret123"},
+            timeout=10
+        )
+        
+        if response.status_code != 200:
+            log_test(
+                "Customer Auth - Login with correct credentials",
+                False,
+                f"Expected 200, got {response.status_code}. Response: {response.text}"
+            )
+            return
+        
+        data = response.json()
+        if "token" not in data or "email" not in data or "name" not in data:
+            log_test(
+                "Customer Auth - Login with correct credentials",
+                False,
+                f"Missing required fields in response. Got: {data}"
+            )
+            return
+        
+        if data["email"] != customer_email.lower():
+            log_test(
+                "Customer Auth - Login with correct credentials",
+                False,
+                f"Email mismatch. Expected {customer_email.lower()}, got {data['email']}"
+            )
+            return
+        
+        log_test(
+            "Customer Auth - Login with correct credentials",
+            True,
+            f"Login successful for {customer_email}"
+        )
+    except Exception as e:
+        log_test("Customer Auth - Login with correct credentials", False, str(e))
+
+
+def test_customer_login_wrong_password():
+    """Test 21: POST /api/customer/login with wrong password (401)"""
+    if not customer_email:
+        log_test("Customer Auth - Login wrong password returns 401", False, "No customer email available")
+        return
+    
+    try:
+        response = requests.post(
+            f"{API_URL}/customer/login",
+            json={"email": customer_email, "password": "wrongpassword"},
+            timeout=10
+        )
+        
+        if response.status_code == 401:
+            log_test("Customer Auth - Login wrong password returns 401", True)
+        else:
+            log_test(
+                "Customer Auth - Login wrong password returns 401",
+                False,
+                f"Expected 401, got {response.status_code}. Response: {response.text}"
+            )
+    except Exception as e:
+        log_test("Customer Auth - Login wrong password returns 401", False, str(e))
+
+
+def test_customer_login_nonexistent_email():
+    """Test 22: POST /api/customer/login with non-existent email (401)"""
+    try:
+        response = requests.post(
+            f"{API_URL}/customer/login",
+            json={"email": "nonexistent@example.com", "password": "secret123"},
+            timeout=10
+        )
+        
+        if response.status_code == 401:
+            log_test("Customer Auth - Login non-existent email returns 401", True)
+        else:
+            log_test(
+                "Customer Auth - Login non-existent email returns 401",
+                False,
+                f"Expected 401, got {response.status_code}. Response: {response.text}"
+            )
+    except Exception as e:
+        log_test("Customer Auth - Login non-existent email returns 401", False, str(e))
+
+
+def test_customer_me_without_token():
+    """Test 23: GET /api/customer/me without Authorization header (401/403)"""
+    try:
+        response = requests.get(f"{API_URL}/customer/me", timeout=10)
+        
+        if response.status_code in [401, 403]:
+            log_test("Customer Auth - /customer/me without token returns 401/403", True)
+        else:
+            log_test(
+                "Customer Auth - /customer/me without token returns 401/403",
+                False,
+                f"Expected 401 or 403, got {response.status_code}. Response: {response.text}"
+            )
+    except Exception as e:
+        log_test("Customer Auth - /customer/me without token returns 401/403", False, str(e))
+
+
+def test_customer_me_with_customer_token():
+    """Test 24: GET /api/customer/me with customer Bearer token (200)"""
+    if not customer_token:
+        log_test("Customer Auth - /customer/me with customer token", False, "No customer token available")
+        return
+    
+    try:
+        response = requests.get(
+            f"{API_URL}/customer/me",
+            headers={"Authorization": f"Bearer {customer_token}"},
+            timeout=10
+        )
+        
+        if response.status_code != 200:
+            log_test(
+                "Customer Auth - /customer/me with customer token",
+                False,
+                f"Expected 200, got {response.status_code}. Response: {response.text}"
+            )
+            return
+        
+        data = response.json()
+        if data.get("email") != customer_email.lower() or data.get("role") != "customer":
+            log_test(
+                "Customer Auth - /customer/me with customer token",
+                False,
+                f"Expected email={customer_email.lower()} and role=customer. Got: {data}"
+            )
+            return
+        
+        log_test(
+            "Customer Auth - /customer/me with customer token",
+            True,
+            f"Response: email={data['email']}, name={data.get('name')}, role={data['role']}"
+        )
+    except Exception as e:
+        log_test("Customer Auth - /customer/me with customer token", False, str(e))
+
+
+def test_customer_me_with_admin_token():
+    """Test 25: GET /api/customer/me with admin token (403 - cross-role rejection)"""
+    if not auth_token:
+        log_test("Customer Auth - /customer/me with admin token returns 403", False, "No admin token available")
+        return
+    
+    try:
+        response = requests.get(
+            f"{API_URL}/customer/me",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            timeout=10
+        )
+        
+        if response.status_code == 403:
+            log_test("Customer Auth - /customer/me with admin token returns 403", True, "Cross-role rejection working")
+        else:
+            log_test(
+                "Customer Auth - /customer/me with admin token returns 403",
+                False,
+                f"Expected 403, got {response.status_code}. Response: {response.text}"
+            )
+    except Exception as e:
+        log_test("Customer Auth - /customer/me with admin token returns 403", False, str(e))
+
+
+def test_admin_me_with_customer_token():
+    """Test 26: GET /api/auth/me with customer token (403 - cross-role rejection)"""
+    if not customer_token:
+        log_test("Customer Auth - /auth/me with customer token returns 403", False, "No customer token available")
+        return
+    
+    try:
+        response = requests.get(
+            f"{API_URL}/auth/me",
+            headers={"Authorization": f"Bearer {customer_token}"},
+            timeout=10
+        )
+        
+        if response.status_code == 403:
+            log_test("Customer Auth - /auth/me with customer token returns 403", True, "Cross-role rejection working")
+        else:
+            log_test(
+                "Customer Auth - /auth/me with customer token returns 403",
+                False,
+                f"Expected 403, got {response.status_code}. Response: {response.text}"
+            )
+    except Exception as e:
+        log_test("Customer Auth - /auth/me with customer token returns 403", False, str(e))
+
+
+def test_regression_admin_login():
+    """Test 27: Regression - POST /api/auth/login still works"""
+    try:
+        response = requests.post(
+            f"{API_URL}/auth/login",
+            json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
+            timeout=10
+        )
+        
+        if response.status_code == 200 and "token" in response.json():
+            log_test("Regression - Admin login still works", True)
+        else:
+            log_test(
+                "Regression - Admin login still works",
+                False,
+                f"Expected 200 with token, got {response.status_code}. Response: {response.text}"
+            )
+    except Exception as e:
+        log_test("Regression - Admin login still works", False, str(e))
+
+
+def test_regression_published_content():
+    """Test 28: Regression - GET /api/content/published still works"""
+    try:
+        response = requests.get(f"{API_URL}/content/published", timeout=10)
+        
+        if response.status_code == 200 and "brand" in response.json():
+            log_test("Regression - GET /content/published still works", True)
+        else:
+            log_test(
+                "Regression - GET /content/published still works",
+                False,
+                f"Expected 200 with content, got {response.status_code}"
+            )
+    except Exception as e:
+        log_test("Regression - GET /content/published still works", False, str(e))
+
+
+def test_regression_search():
+    """Test 29: Regression - GET /api/search still works"""
+    try:
+        response = requests.get(f"{API_URL}/search?q=indicator", timeout=10)
+        
+        if response.status_code == 200 and "results" in response.json():
+            log_test("Regression - GET /search still works", True)
+        else:
+            log_test(
+                "Regression - GET /search still works",
+                False,
+                f"Expected 200 with results, got {response.status_code}"
+            )
+    except Exception as e:
+        log_test("Regression - GET /search still works", False, str(e))
+
+
 def restore_original_content():
     """Restore original seeded content using reset-all endpoint"""
     if not auth_token:
@@ -758,13 +1135,37 @@ def main():
     print()
     
     # Auth tests
-    print("🔐 AUTH TESTS")
+    print("🔐 ADMIN AUTH TESTS")
     print("-" * 80)
     test_auth_login_success()
     test_auth_login_wrong_password()
     test_auth_login_wrong_email()
     test_auth_me_without_token()
     test_auth_me_with_token()
+    print()
+    
+    # Customer auth tests
+    print("👤 CUSTOMER AUTH TESTS")
+    print("-" * 80)
+    test_customer_register_success()
+    test_customer_register_duplicate()
+    test_customer_register_invalid_email()
+    test_customer_register_short_password()
+    test_customer_login_success()
+    test_customer_login_wrong_password()
+    test_customer_login_nonexistent_email()
+    test_customer_me_without_token()
+    test_customer_me_with_customer_token()
+    test_customer_me_with_admin_token()
+    test_admin_me_with_customer_token()
+    print()
+    
+    # Regression tests
+    print("🔄 REGRESSION TESTS")
+    print("-" * 80)
+    test_regression_admin_login()
+    test_regression_published_content()
+    test_regression_search()
     print()
     
     # Content tests

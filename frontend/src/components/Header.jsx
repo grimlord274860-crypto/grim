@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Search, ShoppingCart, ChevronDown, Menu, X, Boxes, BarChart3, TrendingUp, Cpu, Zap, Star } from 'lucide-react';
+import { Search, ShoppingCart, ChevronDown, Menu, X, Boxes, BarChart3, TrendingUp, Cpu, Zap, Star, LogIn } from 'lucide-react';
 import { useSite } from '../context/SiteContext';
+import { useCustomerAuth } from '../context/CustomerAuthContext';
 import SearchModal from './SearchModal';
+import UserMenu from './UserMenu';
 
 const LOGO_ICONS = { Boxes, BarChart3, TrendingUp, Cpu, Zap, Star };
 
@@ -17,6 +19,7 @@ const Header = () => {
   const [searchOpen, setSearchOpen] = useState(false);
   const [cartCount] = useState(0);
   const location = useLocation();
+  const { customer, openAuth } = useCustomerAuth();
 
   const isActive = (href) => href.startsWith('/') && location.pathname === href;
   const Logo = LOGO_ICONS[brand.logoIcon] || Boxes;
@@ -83,6 +86,13 @@ const Header = () => {
                   </span>
                 )}
               </button>
+              {customer ? (
+                <UserMenu primary={primary} />
+              ) : (
+                <button onClick={() => openAuth('login')} className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white border border-white/20 hover:border-white/40 transition-colors">
+                  <LogIn className="w-4 h-4" /> Sign in
+                </button>
+              )}
               <button className="lg:hidden text-white p-2" onClick={() => setMobileOpen(!mobileOpen)} aria-label="Menu">
                 {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
               </button>
