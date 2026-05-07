@@ -1,88 +1,210 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Body
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import copy
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List
-import uuid
-from datetime import datetime, timezone
-
+from pydantic import BaseModel
+from typing import Any, Dict, List
 
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+load_dotenv(ROOT_DIR / ".env")
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
+from auth import verify_credentials, create_token, require_admin  # noqa: E402
+from seed_content import INITIAL_CONTENT  # noqa: E402
+
+mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+db = client[os.environ["DB_NAME"]]
 
-# Create the main app without a prefix
 app = FastAPI()
-
-# Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
+CONTENT_DOC_ID = "site_content"
 
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
+# ---------- Helpers ----------
+async def get_content_doc() -> Dict[str, Any]:
+    doc = await db.site_content.find_one({"_id": CONTENT_DOC_ID})
+    if not doc:
+        # Seed first time.
+        seed = {
+            "_id": CONTENT_DOC_ID,
+            "draft": copy.deepcopy(INITIAL_CONTENT),
+            "published": copy.deepcopy(INITIAL_CONTENT),
+        }
+        await db.site_content.insert_one(seed)
+        doc = seed
+    return doc
 
-# Add your routes to the router instead of directly to app
+
+def strip_id(doc: Dict[str, Any]) -> Dict[str, Any]:
+    doc = dict(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+# ---------- Schemas ----------
+class LoginIn(BaseModel):
+    email: str
+    password: str
+
+
+class LoginOut(BaseModel):
+    token: str
+    email: str
+
+
+class ContentIn(BaseModel):
+    content: Dict[str, Any]
+
+
+# ---------- Routes ----------
 @api_router.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"message": "The Crypto Room API"}
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
+@api_router.post("/auth/login", response_model=LoginOut)
+async def login(payload: LoginIn):
+    if not verify_credentials(payload.email, payload.password):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    token = create_token(payload.email)
+    return LoginOut(token=token, email=payload.email)
 
-# Include the router in the main app
+
+@api_router.get("/auth/me")
+async def me(email: str = Depends(require_admin)):
+    return {"email": email, "role": "admin"}
+
+
+@api_router.get("/content/published")
+async def get_published():
+    doc = await get_content_doc()
+    return doc.get("published", {})
+
+
+@api_router.get("/content/draft")
+async def get_draft(_: str = Depends(require_admin)):
+    doc = await get_content_doc()
+    return doc.get("draft", {})
+
+
+@api_router.put("/content/draft")
+async def update_draft(payload: ContentIn = Body(...), _: str = Depends(require_admin)):
+    await get_content_doc()  # ensure exists
+    await db.site_content.update_one(
+        {"_id": CONTENT_DOC_ID},
+        {"$set": {"draft": payload.content}},
+    )
+    return {"ok": True}
+
+
+@api_router.post("/content/publish")
+async def publish(_: str = Depends(require_admin)):
+    doc = await get_content_doc()
+    draft = doc.get("draft", {})
+    await db.site_content.update_one(
+        {"_id": CONTENT_DOC_ID},
+        {"$set": {"published": draft}},
+    )
+    return {"ok": True}
+
+
+@api_router.post("/content/reset-draft")
+async def reset_draft(_: str = Depends(require_admin)):
+    """Discard draft changes — reset draft to current published."""
+    doc = await get_content_doc()
+    pub = doc.get("published", {})
+    await db.site_content.update_one(
+        {"_id": CONTENT_DOC_ID},
+        {"$set": {"draft": pub}},
+    )
+    return {"ok": True}
+
+
+@api_router.post("/content/reset-all")
+async def reset_all(_: str = Depends(require_admin)):
+    """Reset everything to the original seed content."""
+    seed = copy.deepcopy(INITIAL_CONTENT)
+    await db.site_content.update_one(
+        {"_id": CONTENT_DOC_ID},
+        {"$set": {"draft": seed, "published": seed}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+# ---------- Search (across published content) ----------
+@api_router.get("/search")
+async def search(q: str = ""):
+    q = (q or "").strip().lower()
+    if not q or len(q) < 2:
+        return {"results": []}
+    doc = await get_content_doc()
+    pub = doc.get("published", {})
+    results: List[Dict[str, Any]] = []
+
+    def add(kind: str, title: str, subtitle: str, url: str):
+        results.append({"kind": kind, "title": title, "subtitle": subtitle, "url": url})
+
+    def matches(*texts: str) -> bool:
+        return any(q in (t or "").lower() for t in texts)
+
+    # Indicators
+    for ind in pub.get("indicators", []) or []:
+        if matches(ind.get("name"), ind.get("tagline"), ind.get("description"), ind.get("longDescription")):
+            add("Indicator", ind.get("name", ""), ind.get("tagline", ""), f"/indicators/{ind.get('slug', '')}")
+
+    # MT5 Plans
+    for plan in pub.get("mt5Plans", []) or []:
+        if matches(plan.get("name"), plan.get("description"), " ".join(plan.get("features", []) or [])):
+            add("MT5 Plan", f"{plan.get('name', '')} \u2014 ${plan.get('price', '')}/{plan.get('period', '')}", plan.get("description", ""), "/mt5")
+
+    # FAQs
+    for faq in pub.get("faqs", []) or []:
+        if matches(faq.get("question"), faq.get("answer")):
+            add("FAQ", faq.get("question", ""), (faq.get("answer") or "")[:120], "/#faq")
+
+    # Features
+    for ft in (pub.get("features", {}) or {}).get("items", []) or []:
+        if matches(ft.get("title"), ft.get("description")):
+            add("Feature", ft.get("title", ""), (ft.get("description") or "")[:120], "/")
+
+    # Reviews
+    for rv in (pub.get("reviewsSection", {}) or {}).get("items", []) or []:
+        if matches(rv.get("name"), rv.get("text")):
+            add("Review", rv.get("name", ""), (rv.get("text") or "")[:120], "/")
+
+    # Nav links
+    for n in (pub.get("header", {}) or {}).get("navLinks", []) or []:
+        if matches(n.get("label")):
+            add("Page", n.get("label", ""), "", n.get("href", "#"))
+
+    # Footer links
+    for col in (pub.get("footer", {}) or {}).get("columns", []) or []:
+        for ln in col.get("links", []) or []:
+            if matches(ln.get("label"), col.get("title")):
+                add("Link", ln.get("label", ""), col.get("title", ""), ln.get("href", "#"))
+
+    return {"results": results[:30]}
+
+
 app.include_router(api_router)
 
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

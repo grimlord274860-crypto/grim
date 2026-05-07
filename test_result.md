@@ -101,3 +101,125 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: |
+  Build a CMS-level admin backend for "The Crypto Room" website. Admin login with hardcoded credentials
+  (shivasai274860@gmail.com / Shiva@#Grim1234). Admin should be able to edit every piece of content on the
+  site (header, home, indicators, MT5, referral, footer, theme/brand) with per-item style overrides.
+  Workflow: Save Draft (template) and Publish (live). Site search across all content. Public site reads
+  published content; admin can preview the draft.
+
+backend:
+  - task: "Admin auth (POST /api/auth/login, GET /api/auth/me) with hardcoded creds + JWT"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py, /app/backend/auth.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "JWT issued from env credentials. /me requires Bearer token."
+        - working: true
+          agent: "testing"
+          comment: "✅ All auth tests passed (5/5): Login with correct credentials returns 200 with token+email. Wrong password returns 401. Wrong email returns 401. /me without token returns 403. /me with valid Bearer token returns 200 with email='shivasai274860@gmail.com' and role='admin'."
+
+  - task: "Content CRUD with draft/publish workflow"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Endpoints GET /content/published (public), GET /content/draft (auth), PUT /content/draft (auth), POST /content/publish (auth), POST /content/reset-draft (auth), POST /content/reset-all (auth). MongoDB single doc with draft+published. Seeded on first request."
+        - working: true
+          agent: "testing"
+          comment: "✅ All content workflow tests passed (6/6): GET /content/published returns 200 with all required keys (theme, brand, header, hero, features, trustedLogos, proof, profits, reviewsSection, faqs, cta, indicatorsPage, indicators[6], mt5Page, mt5Plans[3], referralPage, footer). Indicators count=6 with slugs no-1 to no-6. MT5 plans count=3 with signalsPerDay [3,5,8]. GET /content/draft without auth returns 403. GET /content/draft with auth returns 200. PUT /content/draft successfully updates draft without affecting published. POST /content/publish copies draft to published. POST /content/reset-draft copies published back to draft. POST /content/reset-all restores original seed content."
+
+  - task: "Site-wide search GET /api/search?q="
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Searches across published indicators, mt5 plans, faqs, features, reviews, nav, footer links. Returns up to 30 results. Min query length 2."
+        - working: true
+          agent: "testing"
+          comment: "✅ All search tests passed (4/4): q=indicator returns 200 with 6 Indicator results (URLs like /indicators/no-1). q=a (single char) returns empty results as expected (min 2 chars). q=mt5 returns 200 with 3 MT5 Plan results. q=tradingview returns 200 with 2 FAQ results. Search correctly filters by min query length and searches across all content types."
+
+frontend:
+  - task: "Public pages dynamic from backend (SiteContext) + admin panel UI"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/admin/*, /app/frontend/src/context/*, /app/frontend/src/api.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Not requested for automated testing yet \u2014 user will test admin UI manually."
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    - agent: "main"
+      message: |
+        Backend ready for testing. Hardcoded admin credentials live in /app/backend/.env
+        (ADMIN_EMAIL=shivasai274860@gmail.com, ADMIN_PASSWORD=Shiva@#Grim1234, JWT_SECRET set).
+        Please verify:
+        1) Login: POST /api/auth/login with correct creds returns token; wrong creds return 401.
+        2) /api/auth/me with Bearer token returns email+role; without token \u2192 401/403.
+        3) GET /api/content/published is public and returns seeded structure
+           (theme, brand, header, hero, features, indicators[6], mt5Plans[3], referralPage, footer).
+        4) GET /api/content/draft requires auth.
+        5) PUT /api/content/draft updates draft (auth) without affecting published.
+        6) POST /api/content/publish copies draft -> published.
+        7) POST /api/content/reset-draft copies published -> draft.
+        8) GET /api/search?q=indicator returns results across kinds (Indicator, MT5 Plan, FAQ, Feature, Review, etc.); q with <2 chars returns empty list.
+    - agent: "testing"
+      message: |
+        ✅ BACKEND TESTING COMPLETE - ALL TESTS PASSED (15/15)
+        
+        Comprehensive backend API testing completed successfully:
+        
+        🔐 AUTH (5/5 passed):
+        - Login with correct credentials: ✅ Returns 200 with token + email
+        - Login with wrong password: ✅ Returns 401
+        - Login with wrong email: ✅ Returns 401
+        - /me without token: ✅ Returns 403
+        - /me with valid token: ✅ Returns 200 with email + role=admin
+        
+        📄 CONTENT CRUD (6/6 passed):
+        - GET /content/published (public): ✅ Returns all required keys, 6 indicators (no-1 to no-6), 3 MT5 plans (signalsPerDay: 3,5,8)
+        - GET /content/draft without auth: ✅ Returns 403
+        - GET /content/draft with auth: ✅ Returns 200 with draft content
+        - PUT /content/draft: ✅ Updates draft without affecting published
+        - POST /content/publish: ✅ Copies draft to published
+        - POST /content/reset-draft: ✅ Copies published back to draft
+        
+        🔍 SEARCH (4/4 passed):
+        - q=indicator: ✅ Returns 6 Indicator results with correct URLs
+        - q=a (single char): ✅ Returns empty results (min 2 chars enforced)
+        - q=mt5: ✅ Returns 3 MT5 Plan results
+        - q=tradingview: ✅ Returns 2 FAQ results
+        
+        All endpoints working correctly. Draft/publish workflow verified. Search functionality across all content types confirmed. Original content restored via /api/content/reset-all.
